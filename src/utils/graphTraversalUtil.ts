@@ -1,6 +1,6 @@
 import type { LGraph, LGraphNode, Subgraph } from '@comfyorg/litegraph'
 
-import type { NodeLocatorId } from '@/types/nodeIdentification'
+import type { NodeExecutionId, NodeLocatorId } from '@/types/nodeIdentification'
 import { parseNodeLocatorId } from '@/types/nodeIdentification'
 
 import { isSubgraphIoNode } from './typeGuardUtil'
@@ -205,7 +205,7 @@ export function findSubgraphByUuid(
   targetUuid: string
 ): Subgraph | null {
   // Check all nodes in the current graph
-  for (const node of graph._nodes) {
+  for (const node of graph.nodes) {
     if (node.isSubgraphNode?.() && node.subgraph) {
       if (node.subgraph.id === targetUuid) {
         return node.subgraph
@@ -215,6 +215,42 @@ export function findSubgraphByUuid(
       if (found) return found
     }
   }
+  return null
+}
+
+/**
+ * Iteratively finds the path of subgraph IDs to a target subgraph.
+ * @param rootGraph The graph to start searching from.
+ * @param targetId The ID of the subgraph to find.
+ * @returns An array of subgraph IDs representing the path, or `null` if not found.
+ */
+export function findSubgraphPathById(
+  rootGraph: LGraph,
+  targetId: string
+): string[] | null {
+  const stack: { graph: LGraph | Subgraph; path: string[] }[] = [
+    { graph: rootGraph, path: [] }
+  ]
+
+  while (stack.length > 0) {
+    const { graph, path } = stack.pop()!
+
+    // Check if graph exists and has _nodes property
+    if (!graph || !graph._nodes || !Array.isArray(graph._nodes)) {
+      continue
+    }
+
+    for (const node of graph._nodes) {
+      if (node.isSubgraphNode?.() && node.subgraph) {
+        const newPath = [...path, String(node.subgraph.id)]
+        if (node.subgraph.id === targetId) {
+          return newPath
+        }
+        stack.push({ graph: node.subgraph, path: newPath })
+      }
+    }
+  }
+
   return null
 }
 
@@ -350,4 +386,107 @@ export function mapSubgraphNodes<T>(
  */
 export function getAllNonIoNodesInSubgraph(subgraph: Subgraph): LGraphNode[] {
   return subgraph.nodes.filter((node) => !isSubgraphIoNode(node))
+}
+
+/**
+ * Performs depth-first traversal of nodes and their subgraphs.
+ * Generic visitor pattern that can be used for various node processing tasks.
+ *
+ * @param nodes - Starting nodes for traversal
+ * @param visitor - Function called for each node with its context
+ * @param expandSubgraphs - Whether to traverse into subgraph nodes (default: true)
+ */
+export function traverseNodesDepthFirst<T>(
+  nodes: LGraphNode[],
+  visitor: (node: LGraphNode, context: T) => T,
+  initialContext: T,
+  expandSubgraphs: boolean = true
+): void {
+  type StackItem = { node: LGraphNode; context: T }
+  const stack: StackItem[] = []
+
+  // Initialize stack with starting nodes
+  for (const node of nodes) {
+    stack.push({ node, context: initialContext })
+  }
+
+  // Process stack iteratively (DFS)
+  while (stack.length > 0) {
+    const { node, context } = stack.pop()!
+
+    // Visit node and get updated context for children
+    const childContext = visitor(node, context)
+
+    // If it's a subgraph and we should expand, add children to stack
+    if (expandSubgraphs && node.isSubgraphNode?.() && node.subgraph) {
+      // Process children in reverse order to maintain left-to-right DFS processing
+      // when popping from stack (LIFO). Iterate backwards to avoid array reversal.
+      const children = node.subgraph.nodes
+      for (let i = children.length - 1; i >= 0; i--) {
+        stack.push({ node: children[i], context: childContext })
+      }
+    }
+  }
+}
+
+/**
+ * Collects nodes with custom data during depth-first traversal.
+ * Generic collector that can gather any type of data per node.
+ *
+ * @param nodes - Starting nodes for traversal
+ * @param collector - Function that returns data to collect for each node
+ * @param contextBuilder - Function that builds context for child nodes
+ * @param expandSubgraphs - Whether to traverse into subgraph nodes
+ * @returns Array of collected data
+ */
+export function collectFromNodes<T, C>(
+  nodes: LGraphNode[],
+  collector: (node: LGraphNode, context: C) => T | null,
+  contextBuilder: (node: LGraphNode, parentContext: C) => C,
+  initialContext: C,
+  expandSubgraphs: boolean = true
+): T[] {
+  const results: T[] = []
+
+  traverseNodesDepthFirst(
+    nodes,
+    (node, context) => {
+      const data = collector(node, context)
+      if (data !== null) {
+        results.push(data)
+      }
+      return contextBuilder(node, context)
+    },
+    initialContext,
+    expandSubgraphs
+  )
+
+  return results
+}
+
+/**
+ * Collects execution IDs for selected nodes and all their descendants.
+ * Uses the generic DFS traversal with optimized string building.
+ *
+ * @param selectedNodes - The selected nodes to process
+ * @returns Array of execution IDs for selected nodes and all nodes within selected subgraphs
+ */
+export function getExecutionIdsForSelectedNodes(
+  selectedNodes: LGraphNode[]
+): NodeExecutionId[] {
+  return collectFromNodes(
+    selectedNodes,
+    // Collector: build execution ID for each node
+    (node, parentExecutionId: string): NodeExecutionId => {
+      const nodeId = String(node.id)
+      return parentExecutionId ? `${parentExecutionId}:${nodeId}` : nodeId
+    },
+    // Context builder: pass execution ID to children
+    (node, parentExecutionId: string) => {
+      const nodeId = String(node.id)
+      return parentExecutionId ? `${parentExecutionId}:${nodeId}` : nodeId
+    },
+    '', // Initial context: empty parent execution ID
+    true // Expand subgraphs
+  )
 }

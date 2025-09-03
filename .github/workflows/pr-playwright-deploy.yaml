@@ -11,7 +11,7 @@ env:
 jobs:
   deploy-reports:
     runs-on: ubuntu-latest
-    if: github.repository == 'Comfy-Org/ComfyUI_frontend' && github.event.workflow_run.event == 'pull_request' && github.event.action == 'completed'
+    if: github.event.workflow_run.event == 'pull_request' && github.event.action == 'completed'
     permissions:
       actions: read
     strategy:

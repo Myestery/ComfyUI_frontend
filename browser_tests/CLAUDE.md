@@ -3,7 +3,7 @@
 ## Browser Tests
 - Test user workflows
 - Use Playwright fixtures
-- Follow naming conventions
+- Follow naming conventions.
 
 ## Best Practices
 - Check assets/ for test data

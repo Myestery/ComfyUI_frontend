@@ -1,6 +1,6 @@
 <template>
   <teleport :to="teleportTarget">
-    <nav class="side-tool-bar-container" :class="{ 'small-sidebar': isSmall }">
+    <nav class="side-tool-bar-container bg-red-500" :class="{ 'small-sidebar': isSmall }">
       <SidebarIcon
         v-for="tab in tabs"
         :key="tab.id"

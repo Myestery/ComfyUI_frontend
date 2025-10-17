@@ -92,7 +92,7 @@ jobs:
     steps:
       # Restore test environment from setup job
       - name: Restore test environment
-        uses: ./.github/actions/restore-test-environment
+        uses: ../.github/actions/restore-test-environment
         with:
           cache-key: ${{ needs.setup.outputs.cache-key }}
           launch-server: 'true'

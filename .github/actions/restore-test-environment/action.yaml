@@ -1,0 +1,36 @@
+name: 'Restore Test Environment'
+description: 'Restore cached test environment and setup ComfyUI, frontend, and Playwright'
+
+inputs:
+  cache-key:
+    description: 'Cache key from the setup job'
+    required: true
+  launch-server:
+    description: 'Whether to launch the ComfyUI server'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Wait for cache propagation
+      shell: bash
+      run: sleep 10
+
+    - name: Restore cached setup
+      uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684
+      with:
+        fail-on-cache-miss: true
+        path: .
+        key: comfyui-setup-${{ inputs.cache-key }}
+
+    - name: Setup ComfyUI server
+      uses: ./.github/actions/setup-comfyui-server
+      with:
+        launch_server: ${{ inputs.launch-server }}
+
+    - name: Setup nodejs, pnpm, reuse built frontend
+      uses: ./.github/actions/setup-frontend
+
+    - name: Setup Playwright
+      uses: ./.github/actions/setup-playwright

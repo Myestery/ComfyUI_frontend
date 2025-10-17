@@ -28,6 +28,7 @@ jobs:
       cache-key: ${{ steps.cache-key.outputs.key }}
       pr-number: ${{ steps.pr-info.outputs.pr-number }}
       branch: ${{ steps.pr-info.outputs.branch }}
+      comment-id: ${{ steps.find-update-comment.outputs.comment-id }}
     steps:
       - name: Get PR info
         id: pr-info
@@ -91,11 +92,26 @@ jobs:
         shardTotal: [4]
     steps:
       # Restore test environment from setup job
-      - name: Restore test environment
-        uses: ../.github/actions/restore-test-environment
+      - name: Wait for cache propagation
+        run: sleep 10
+
+      - name: Restore cached setup
+        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684
         with:
-          cache-key: ${{ needs.setup.outputs.cache-key }}
-          launch-server: 'true'
+          fail-on-cache-miss: true
+          path: .
+          key: comfyui-setup-${{ needs.setup.outputs.cache-key }}
+
+      - name: Setup ComfyUI server
+        uses: ./.github/actions/setup-comfyui-server
+        with:
+          launch_server: true
+
+      - name: Setup nodejs, pnpm, reuse built frontend
+        uses: ./.github/actions/setup-frontend
+
+      - name: Setup Playwright
+        uses: ./.github/actions/setup-playwright
 
       # Run sharded tests with snapshot updates
       - name: Update snapshots (Shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }})
@@ -173,7 +189,7 @@ jobs:
         uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9
         if: github.event_name == 'issue_comment'
         with:
-          comment-id: ${{ steps.find-update-comment.outputs.comment-id }}
+          comment-id: ${{ needs.setup.outputs.comment-id }}
           issue-number: ${{ needs.setup.outputs.pr-number }}
           reactions: +1
           reactions-edit-mode: replace

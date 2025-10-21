@@ -193,11 +193,24 @@ jobs:
             fi
 
             echo "Copying from $shard_dir..."
-            if ! cp -r "$shard_dir"/* browser_tests/; then
-              echo "::error::Failed to copy snapshots from $shard_dir to browser_tests/"
+            echo "Directory structure:"
+            ls -la "$shard_dir" || true
+
+            # The artifact contains browser_tests/**/*-snapshots/ structure
+            # So we need to merge browser_tests/ from the artifact into browser_tests/
+            if [ -d "$shard_dir/browser_tests" ]; then
+              # Use rsync for robust merging (overwrites existing files, preserves structure)
+              if ! rsync -av "$shard_dir/browser_tests/" browser_tests/; then
+                echo "::error::Failed to merge snapshots from $shard_dir/browser_tests/ to browser_tests/"
+                exit 1
+              fi
+              ((merged_count++))
+            else
+              echo "::error::Expected browser_tests/ subdirectory in $shard_dir but not found"
+              echo "Contents of $shard_dir:"
+              find "$shard_dir" -type f | head -20
               exit 1
             fi
-            ((merged_count++))
           done
 
           echo "Snapshot merge complete. Merged snapshots from $merged_count shard(s)"

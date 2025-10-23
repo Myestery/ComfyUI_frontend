@@ -10,9 +10,7 @@
     class="hover:bg-[#E7E6E6] hover:dark-theme:bg-charcoal-600"
     @click="toggleBypass"
   >
-    <template #icon>
-      <i class="icon-[lucide--ban] h-4 w-4" />
-    </template>
+    alllll 
   </Button>
 </template>
 

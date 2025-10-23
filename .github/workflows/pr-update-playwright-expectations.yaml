@@ -75,7 +75,6 @@ jobs:
           path: |
             ComfyUI
             dist
-            node_modules
           key: comfyui-setup-${{ steps.cache-key.outputs.key }}
 
   # Sharded snapshot updates

@@ -155,28 +155,53 @@ jobs:
           path: ./downloaded-snapshots
           merge-multiple: false
 
+      - name: Log downloaded artifacts structure
+        run: |
+          echo "=== DOWNLOADED ARTIFACTS STRUCTURE ==="
+          if [ -d "./downloaded-snapshots" ]; then
+            echo "Root of downloaded-snapshots:"
+            ls -laR ./downloaded-snapshots | head -100
+            echo ""
+            echo "Total files in downloaded-snapshots:"
+            find ./downloaded-snapshots -type f | wc -l
+            echo ""
+            echo "Sample files:"
+            find ./downloaded-snapshots -type f | head -20
+          else
+            echo "::warning::downloaded-snapshots directory does not exist"
+          fi
+
       # Merge snapshots from all shards into browser_tests directory
       - name: Merge snapshots
         run: |
           set -euo pipefail
 
-          echo "Merging snapshots from all shards..."
+          echo "=========================================="
+          echo "STARTING MERGE SNAPSHOTS PROCESS"
+          echo "=========================================="
 
           # Verify target directory exists
           if [ ! -d "browser_tests" ]; then
             echo "::error::Target directory 'browser_tests' does not exist"
             exit 1
           fi
+          echo "✓ Target directory browser_tests exists"
 
           # List all downloaded artifacts for debugging
+          echo ""
           echo "Available shard artifacts:"
-          ls -la ./downloaded-snapshots/ || echo "No downloaded-snapshots directory found"
+          ls -la ./downloaded-snapshots/ || echo "::warning::No downloaded-snapshots directory found"
 
           merged_count=0
           skipped_count=0
+          total_files_before=$(find browser_tests -type f 2>/dev/null | wc -l || echo 0)
+          echo "Total files in browser_tests before merge: $total_files_before"
 
+          echo ""
+          echo "Processing shard directories..."
           for shard_dir in ./downloaded-snapshots/snapshots-shard-*; do
-            echo "Processing: $shard_dir"
+            echo ""
+            echo "--- Processing: $shard_dir ---"
 
             # Check if glob matched any directories
             if [ ! -e "$shard_dir" ]; then
@@ -190,47 +215,159 @@ jobs:
               continue
             fi
 
+            shard_file_count=$(find "$shard_dir" -type f 2>/dev/null | wc -l || echo 0)
+            echo "Files in this shard: $shard_file_count"
+
             # Check if directory has content (empty is OK - shard might have no changes)
             if [ -z "$(ls -A "$shard_dir" 2>/dev/null)" ]; then
-              echo "Shard directory $shard_dir is empty (no snapshots updated in this shard)"
+              echo "ℹ Shard directory is empty (no snapshots updated in this shard)"
               skipped_count=$((skipped_count + 1))
               continue
             fi
 
-            echo "Merging snapshots from $shard_dir..."
+            echo "Content structure of $shard_dir:"
+            find "$shard_dir" -type f | head -10
+
+            echo ""
+            echo "Merging snapshots from $shard_dir into browser_tests/..."
 
             # The artifact path 'browser_tests/**/*-snapshots/' uploads relative to browser_tests/
             # So downloaded artifacts contain 'tests/' directly, not 'browser_tests/tests/'
             # We need to merge the artifact contents into browser_tests/
-            if ! rsync -a "$shard_dir/" browser_tests/; then
+            if ! rsync -av "$shard_dir/" browser_tests/ 2>&1 | tail -20; then
               echo "::error::Failed to merge snapshots from $shard_dir/ to browser_tests/"
               echo "Contents of $shard_dir:"
               find "$shard_dir" -type f | head -20
               exit 1
             fi
             merged_count=$((merged_count + 1))
-            echo "Successfully merged shard $merged_count"
+            echo "✓ Successfully merged shard $merged_count"
           done
 
-          echo "Snapshot merge complete. Merged: $merged_count shard(s), Skipped: $skipped_count shard(s)"
+          total_files_after=$(find browser_tests -type f 2>/dev/null | wc -l || echo 0)
+          files_added=$((total_files_after - total_files_before))
+          
+          echo ""
+          echo "=========================================="
+          echo "MERGE COMPLETE"
+          echo "=========================================="
+          echo "Merged shard(s): $merged_count"
+          echo "Skipped shard(s): $skipped_count"
+          echo "Files before: $total_files_before"
+          echo "Files after: $total_files_after"
+          echo "Files added/modified: $files_added"
 
-      - name: Debugging info
+      - name: Pre-commit git status
         run: |
-          echo "PR: ${{ needs.setup.outputs.pr-number }}"
-          echo "Branch: ${{ needs.setup.outputs.branch }}"
+          echo "=========================================="
+          echo "PRE-COMMIT GIT STATUS"
+          echo "=========================================="
+          echo "Current branch: $(git rev-parse --abbrev-ref HEAD)"
+          echo "Current commit: $(git rev-parse HEAD)"
+          echo ""
+          echo "Git status:"
           git status
+          echo ""
+          echo "Untracked and modified files in browser_tests:"
+          git status browser_tests
+          echo ""
+          echo "Detailed changes:"
+          git diff --name-status browser_tests | head -30 || echo "No unstaged changes"
+          echo ""
+          echo "File count in browser_tests:"
+          find browser_tests -type f | wc -l
 
-      - name: Commit updated expectations
+      - name: Stage changes
         run: |
+          echo "=========================================="
+          echo "STAGING CHANGES"
+          echo "=========================================="
+          echo "Running: git add browser_tests"
+          git add browser_tests
+          echo "✓ Add command completed"
+          echo ""
+          echo "Staged changes:"
+          git diff --cached --name-status | head -50 || echo "No staged changes"
+          echo ""
+          echo "Staged file count:"
+          git diff --cached --name-only | wc -l
+          echo ""
+          echo "Detailed staged diff (first 50 lines):"
+          git diff --cached --stat browser_tests
+
+      - name: Check diff and prepare commit
+        id: check-changes
+        run: |
+          echo "=========================================="
+          echo "CHECKING FOR CHANGES TO COMMIT"
+          echo "=========================================="
+          if git diff --cached --quiet; then
+            echo "✓ No changes detected in staged files"
+            echo "has-changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "✓ Changes detected!"
+            echo "has-changes=true" >> $GITHUB_OUTPUT
+            echo ""
+            echo "Summary of staged changes:"
+            git diff --cached --stat
+            echo ""
+            echo "First 100 lines of diff:"
+            git diff --cached | head -100
+          fi
+
+      - name: Commit changes
+        if: steps.check-changes.outputs.has-changes == 'true'
+        run: |
+          echo "=========================================="
+          echo "COMMITTING CHANGES"
+          echo "=========================================="
           git config --global user.name 'github-actions'
           git config --global user.email 'github-actions@github.com'
-          git add browser_tests
-          if git diff --cached --quiet; then
-            echo "No changes to commit"
+          echo "Git config set for: github-actions (github-actions@github.com)"
+          echo ""
+          echo "Running commit..."
+          if git commit -m "[automated] Update test expectations"; then
+            echo "✓ Commit successful"
+            echo ""
+            echo "Commit details:"
+            git log -1 --stat
           else
-            git commit -m "[automated] Update test expectations"
-            git push origin ${{ needs.setup.outputs.branch }}
+            echo "::error::Commit failed"
+            exit 1
           fi
+
+      - name: Push changes
+        if: steps.check-changes.outputs.has-changes == 'true'
+        run: |
+          echo "=========================================="
+          echo "PUSHING CHANGES"
+          echo "=========================================="
+          echo "Target branch: ${{ needs.setup.outputs.branch }}"
+          echo "Repository: ${{ github.repository }}"
+          echo ""
+          echo "Current branch after commit:"
+          git log --oneline -3
+          echo ""
+          echo "Pushing to origin ${{ needs.setup.outputs.branch }}..."
+          if git push origin ${{ needs.setup.outputs.branch }}; then
+            echo "✓ Push successful"
+          else
+            echo "::error::Push failed"
+            git log --oneline -1
+            exit 1
+          fi
+
+      - name: Post-commit verification
+        if: steps.check-changes.outputs.has-changes == 'true'
+        run: |
+          echo "=========================================="
+          echo "POST-COMMIT VERIFICATION"
+          echo "=========================================="
+          echo "Final git status:"
+          git status
+          echo ""
+          echo "Latest commits:"
+          git log --oneline -5
 
       - name: Add Done Reaction
         uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9

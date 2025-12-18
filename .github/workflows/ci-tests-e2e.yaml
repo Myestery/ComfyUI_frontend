@@ -6,7 +6,7 @@ on:
     branches: [main, master, core/*, desktop/*]
   pull_request:
     branches-ignore:
-      [wip/*, draft/*, temp/*, vue-nodes-migration, sno-playwright-*]
+      [wip/*, draft/*, temp/*, vue-nodes-migration, sno-playwright-*, version-bump*]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -28,10 +28,9 @@ jobs:
         uses: ./.github/actions/setup-frontend
         with:
           include_build_step: true
-      - name: Setup Playwright
-        uses: ./.github/actions/setup-playwright  # Setup Playwright and cache browsers
 
       # Save the entire workspace as cache for later test jobs to restore
+      # Note: Playwright browsers are pre-installed in test job containers
       - name: Generate cache key
         id: cache-key
         run: echo "key=$(date +%s)" >> $GITHUB_OUTPUT
@@ -45,6 +44,9 @@ jobs:
   playwright-tests-chromium-sharded:
     needs: setup
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.52.0-noble
+      options: --user 1001
     permissions:
       contents: read
     strategy:
@@ -70,10 +72,8 @@ jobs:
           launch_server: true
       - name: Setup nodejs, pnpm, reuse built frontend
         uses: ./.github/actions/setup-frontend
-      - name: Setup Playwright
-        uses: ./.github/actions/setup-playwright
 
-      # Run sharded tests and upload sharded reports
+      # Run sharded tests and upload sharded reports (browsers pre-installed in container)
       - name: Run Playwright tests (Shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }})
         id: playwright
         run: pnpm exec playwright test --project=chromium --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }} --reporter=blob
@@ -93,6 +93,9 @@ jobs:
     timeout-minutes: 15
     needs: setup
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.52.0-noble
+      options: --user 1001
     permissions:
       contents: read
     strategy:
@@ -117,10 +120,8 @@ jobs:
           launch_server: true
       - name: Setup nodejs, pnpm, reuse built frontend
         uses: ./.github/actions/setup-frontend
-      - name: Setup Playwright
-        uses: ./.github/actions/setup-playwright
 
-      # Run tests and upload reports
+      # Run tests and upload reports (browsers pre-installed in container)
       - name: Run Playwright tests (${{ matrix.browser }})
         id: playwright
         run: |
@@ -150,16 +151,17 @@ jobs:
   merge-reports:
     needs: [playwright-tests-chromium-sharded]
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.52.0-noble
+      options: --user 1001
     if: ${{ !cancelled() }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      # Setup Test Environment, we only need playwright to merge reports
+      # Setup pnpm/node to run playwright merge-reports (browsers pre-installed in container)
       - name: Setup frontend
         uses: ./.github/actions/setup-frontend
-      - name: Setup Playwright
-        uses: ./.github/actions/setup-playwright
 
       - name: Download blob reports
         uses: actions/download-artifact@v4

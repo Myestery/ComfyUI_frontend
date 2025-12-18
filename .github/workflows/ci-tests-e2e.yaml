@@ -53,7 +53,9 @@ jobs:
         shardIndex: [1, 2, 3, 4, 5, 6, 7, 8]
         shardTotal: [8]
     steps:
-      # Download built workspace from setup job
+      # Checkout to get .github/actions, then download built workspace
+      - name: Checkout repository
+        uses: actions/checkout@v5
       - name: Download workspace
         uses: actions/download-artifact@v4
         with:
@@ -97,7 +99,9 @@ jobs:
       matrix:
         browser: [chromium-2x, chromium-0.5x, mobile-chrome]
     steps:
-      # Download built workspace from setup job
+      # Checkout to get .github/actions, then download built workspace
+      - name: Checkout repository
+        uses: actions/checkout@v5
       - name: Download workspace
         uses: actions/download-artifact@v4
         with:

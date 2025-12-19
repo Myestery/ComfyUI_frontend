@@ -27,15 +27,12 @@ jobs:
         with:
           include_build_step: true
 
-      # Upload workspace as artifact for test jobs (works with containers)
-      # Note: Playwright browsers are pre-installed in test job containers
-      - name: Upload workspace
+      # Upload only built dist/ (test jobs will pnpm install with cache)
+      - name: Upload built frontend
         uses: actions/upload-artifact@v4
         with:
-          name: workspace
-          path: |
-            .
-            !.git
+          name: frontend-dist
+          path: dist/
           retention-days: 1
 
   # Sharded chromium tests
@@ -43,8 +40,7 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     container:
-      image: mcr.microsoft.com/playwright:v1.52.0-noble
-      options: --user 1001
+      image: mcr.microsoft.com/playwright/python:v1.57.0-noble
     permissions:
       contents: read
     strategy:
@@ -53,23 +49,24 @@ jobs:
         shardIndex: [1, 2, 3, 4, 5, 6, 7, 8]
         shardTotal: [8]
     steps:
-      # Checkout to get .github/actions, then download built workspace
       - name: Checkout repository
         uses: actions/checkout@v5
-      - name: Download workspace
+      - name: Download built frontend
         uses: actions/download-artifact@v4
         with:
-          name: workspace
+          name: frontend-dist
+          path: dist/
 
-      # Setup Test Environment for this runner, start server, use built frontend ./dist from 'setup' job
+      # Setup Test Environment for this runner, start server
       - name: Setup ComfyUI server
         uses: ./.github/actions/setup-comfyui-server
         with:
           launch_server: true
-      - name: Setup nodejs, pnpm, reuse built frontend
+          container_mode: true
+      - name: Setup nodejs, pnpm
         uses: ./.github/actions/setup-frontend
 
-      # Run sharded tests and upload sharded reports (browsers pre-installed in container)
+      # Run sharded tests (browsers pre-installed in container)
       - name: Run Playwright tests (Shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }})
         id: playwright
         run: pnpm exec playwright test --project=chromium --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }} --reporter=blob
@@ -90,8 +87,7 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     container:
-      image: mcr.microsoft.com/playwright:v1.52.0-noble
-      options: --user 1001
+      image: mcr.microsoft.com/playwright/python:v1.57.0-noble
     permissions:
       contents: read
     strategy:
@@ -99,23 +95,24 @@ jobs:
       matrix:
         browser: [chromium-2x, chromium-0.5x, mobile-chrome]
     steps:
-      # Checkout to get .github/actions, then download built workspace
       - name: Checkout repository
         uses: actions/checkout@v5
-      - name: Download workspace
+      - name: Download built frontend
         uses: actions/download-artifact@v4
         with:
-          name: workspace
+          name: frontend-dist
+          path: dist/
 
-      # Setup Test Environment for this runner, start server, use built frontend ./dist from 'setup' job
+      # Setup Test Environment for this runner, start server
       - name: Setup ComfyUI server
         uses: ./.github/actions/setup-comfyui-server
         with:
           launch_server: true
-      - name: Setup nodejs, pnpm, reuse built frontend
+          container_mode: true
+      - name: Setup nodejs, pnpm
         uses: ./.github/actions/setup-frontend
 
-      # Run tests and upload reports (browsers pre-installed in container)
+      # Run tests (browsers pre-installed in container)
       - name: Run Playwright tests (${{ matrix.browser }})
         id: playwright
         run: |
@@ -141,19 +138,16 @@ jobs:
           path: ./playwright-report/
           retention-days: 30
 
-  # Merge sharded test reports
+  # Merge sharded test reports (no container needed - only runs CLI)
   merge-reports:
     needs: [playwright-tests-chromium-sharded]
     runs-on: ubuntu-latest
-    container:
-      image: mcr.microsoft.com/playwright:v1.52.0-noble
-      options: --user 1001
     if: ${{ !cancelled() }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      # Setup pnpm/node to run playwright merge-reports (browsers pre-installed in container)
+      # Setup pnpm/node to run playwright merge-reports (no browsers needed)
       - name: Setup frontend
         uses: ./.github/actions/setup-frontend
 

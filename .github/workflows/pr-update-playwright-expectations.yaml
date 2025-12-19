@@ -119,7 +119,25 @@ jobs:
           echo "STAGING CHANGED SNAPSHOTS (Shard ${{ matrix.shardIndex }})"
           echo "=========================================="
 
+          # Configure git safe.directory for container environment
+          git config --global --add safe.directory "$(pwd)"
+
+          # Debug: Show current directory and git status
+          echo "Current directory: $(pwd)"
+          echo "Git root: $(git rev-parse --show-toplevel 2>/dev/null || echo 'not a git repo')"
+          echo ""
+          echo "Checking for snapshot files..."
+          find browser_tests -name "*-snapshots" -type d 2>/dev/null | head -5 || echo "No snapshot dirs found"
+          echo ""
+          echo "Sample snapshot files:"
+          find browser_tests -path "*-snapshots/*.png" -type f 2>/dev/null | head -5 || echo "No snapshot files found"
+          echo ""
+
           # Get list of changed snapshot files (including untracked/new files)
+          echo "Running git status..."
+          git status --porcelain browser_tests/ 2>/dev/null | head -20 || echo "git status failed"
+          echo ""
+
           changed_files=$( (
             git diff --name-only browser_tests/ 2>/dev/null || true
             git ls-files --others --exclude-standard browser_tests/ 2>/dev/null || true

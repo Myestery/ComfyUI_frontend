@@ -112,6 +112,7 @@ jobs:
       # Identify and stage only changed snapshot files
       - name: Stage changed snapshot files
         id: changed-snapshots
+        shell: bash
         run: |
           set -euo pipefail
           echo "=========================================="

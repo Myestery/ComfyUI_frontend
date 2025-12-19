@@ -92,7 +92,7 @@ The project uses **Nx** for build orchestration and task management
 - Keep PRs focused and small
   - If it looks like the current changes will have 300+ lines of non-test code, suggest ways it could be broken into multiple PRs
 
-## Security & Configuration Tips
+## Security & Configuration Tips for devs
 
 - Secrets: Use `.env` (see `.env_example`); do not commit secrets.
 

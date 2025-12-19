@@ -209,7 +209,7 @@ The project uses **Nx** for build orchestration and task management
   - YAGNI
   - AHA
   - DRY
-  - SOLID
+  - SOLID principles
 - Clean, stable public APIs
 - Domain-driven design
 - Thousands of users and extensions

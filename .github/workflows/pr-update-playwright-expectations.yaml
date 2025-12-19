@@ -203,9 +203,15 @@ jobs:
           echo "=========================================="
           echo "DOWNLOADED SNAPSHOT FILES"
           echo "=========================================="
-          find ./downloaded-snapshots -type f
-          echo ""
-          echo "Total files: $(find ./downloaded-snapshots -type f | wc -l)"
+          if [ -d "./downloaded-snapshots" ]; then
+            find ./downloaded-snapshots -type f
+            echo ""
+            echo "Total files: $(find ./downloaded-snapshots -type f | wc -l)"
+          else
+            echo "No snapshot artifacts downloaded (no changes in any shard)"
+            echo ""
+            echo "Total files: 0"
+          fi
 
       # Merge only the changed files into browser_tests
       - name: Merge changed snapshots
@@ -215,6 +221,16 @@ jobs:
           echo "=========================================="
           echo "MERGING CHANGED SNAPSHOTS"
           echo "=========================================="
+
+          # Check if any artifacts were downloaded
+          if [ ! -d "./downloaded-snapshots" ]; then
+            echo "No snapshot artifacts to merge"
+            echo "=========================================="
+            echo "MERGE COMPLETE"
+            echo "=========================================="
+            echo "Shards merged: 0"
+            exit 0
+          fi
 
           # Verify target directory exists
           if [ ! -d "browser_tests" ]; then

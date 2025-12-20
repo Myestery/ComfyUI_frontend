@@ -40,7 +40,7 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     container:
-      image: mcr.microsoft.com/playwright/python:v1.57.0-noble
+      image: ghcr.io/myestery/comfyui-test-action:latest
     permissions:
       contents: read
     strategy:
@@ -57,14 +57,15 @@ jobs:
           name: frontend-dist
           path: dist/
 
-      # Setup Test Environment for this runner, start server
-      - name: Setup ComfyUI server
-        uses: ./.github/actions/setup-comfyui-server
-        with:
-          launch_server: true
-          container_mode: true
-      - name: Setup nodejs, pnpm
-        uses: ./.github/actions/setup-frontend
+      # Copy devtools and start server (ComfyUI + deps pre-installed in container)
+      - name: Start ComfyUI server
+        run: |
+          cp -r ./tools/devtools/* /ComfyUI/custom_nodes/ComfyUI_devtools/
+          cd /ComfyUI && python3 main.py --cpu --multi-user --front-end-root $GITHUB_WORKSPACE/dist &
+          wait-for-it --service 127.0.0.1:8188 -t 600
+
+      - name: Install frontend deps
+        run: pnpm install
 
       # Run sharded tests (browsers pre-installed in container)
       - name: Run Playwright tests (Shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }})
@@ -87,7 +88,7 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     container:
-      image: mcr.microsoft.com/playwright/python:v1.57.0-noble
+      image: ghcr.io/myestery/comfyui-test-action:latest
     permissions:
       contents: read
     strategy:
@@ -103,21 +104,20 @@ jobs:
           name: frontend-dist
           path: dist/
 
-      # Setup Test Environment for this runner, start server
-      - name: Setup ComfyUI server
-        uses: ./.github/actions/setup-comfyui-server
-        with:
-          launch_server: true
-          container_mode: true
-      - name: Setup nodejs, pnpm
-        uses: ./.github/actions/setup-frontend
+      # Copy devtools and start server (ComfyUI + deps pre-installed in container)
+      - name: Start ComfyUI server
+        run: |
+          cp -r ./tools/devtools/* /ComfyUI/custom_nodes/ComfyUI_devtools/
+          cd /ComfyUI && python3 main.py --cpu --multi-user --front-end-root $GITHUB_WORKSPACE/dist &
+          wait-for-it --service 127.0.0.1:8188 -t 600
+
+      - name: Install frontend deps
+        run: pnpm install
 
       # Run tests (browsers pre-installed in container)
       - name: Run Playwright tests (${{ matrix.browser }})
         id: playwright
-        run: |
-          # Run tests with blob reporter first
-          pnpm exec playwright test --project=${{ matrix.browser }} --reporter=blob
+        run: pnpm exec playwright test --project=${{ matrix.browser }} --reporter=blob
         env:
           PLAYWRIGHT_BLOB_OUTPUT_DIR: ./blob-report
 

@@ -88,7 +88,7 @@ jobs:
     needs: setup
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/myestery/comfyui-test-action:latest
+      image: ghcr.io/myestery/comfyui-test-action:0.0.3
     permissions:
       contents: read
     strategy:

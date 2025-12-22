@@ -54,7 +54,7 @@ The project uses **Nx** for build orchestration and task management
   - Vue 3 SFCs (`.vue`)
     - Composition API only
   - Tailwind 4 styling
-    - Avoid `<style>` blocks
+    - Avoid `<style>` blocks.
 - Style: (see `.prettierrc`)
   - Indent 2 spaces
   - single quotes
